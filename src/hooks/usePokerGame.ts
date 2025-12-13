@@ -224,6 +224,23 @@ const HAND_RANKS = {
     ROYAL_FLUSH: 10,
 };
 
+// Convert hand rank number to readable name
+const getHandRankName = (rank: number): string => {
+    const names: Record<number, string> = {
+        1: 'High Card',
+        2: 'One Pair',
+        3: 'Two Pair',
+        4: 'Three of a Kind',
+        5: 'Straight',
+        6: 'Flush',
+        7: 'Full House',
+        8: 'Four of a Kind',
+        9: 'Straight Flush',
+        10: 'Royal Flush',
+    };
+    return names[rank] || 'Unknown';
+};
+
 // Get card value (2-14, Ace high)
 const getCardValue = (rank: string): number => {
     const values: Record<string, number> = {
@@ -397,7 +414,14 @@ export interface PokerGameState {
         name: string;
         amount: number;
         reason: 'fold' | 'showdown';
+        handRank?: string; // e.g., "Two Pair", "Flush"
     };
+    // Cards revealed at showdown (only when reason is 'showdown')
+    showdownCards?: {
+        playerName: string;
+        cards: Card[];
+        handRank: string;
+    }[];
     // Leaderboard synced via WebSocket
     leaderboard?: LeaderboardEntry[];
 }
@@ -1312,7 +1336,7 @@ export function usePokerGame(tableId: string) {
                             const playersInShowdown = updatedPlayers.filter(p => p.status !== 'Folded');
                             if (playersInShowdown.length > 0) {
                                 // Evaluate each player's hand and find the winner
-                                const playerHands = playersInShowdown.map((player, idx) => {
+                                const playerHands = playersInShowdown.map((player) => {
                                     // Get player's hole cards from dealtCards
                                     const playerIdx = updatedPlayers.findIndex(p => p.name === player.name);
                                     const holeCards = currentState.dealtCards?.playerCards?.[playerIdx] || [];
@@ -1342,9 +1366,17 @@ export function usePokerGame(tableId: string) {
 
                                 // For now, just take first winner (TODO: split pot for ties)
                                 const winner = winners[0].player;
+                                const winnerHandRank = getHandRankName(winners[0].bestHand.rank);
                                 const totalPot = currentState.pot + potIncrease;
 
-                                console.log('[Showdown] 🏆 Winner:', winner.name, 'with hand rank:', winners[0].bestHand.rank);
+                                console.log('[Showdown] 🏆 Winner:', winner.name, 'with', winnerHandRank);
+
+                                // Build showdown cards for ALL players in showdown (reveal their cards)
+                                const showdownCards = playerHands.map(ph => ({
+                                    playerName: ph.player.name,
+                                    cards: ph.holeCards,
+                                    handRank: getHandRankName(ph.bestHand.rank),
+                                }));
 
                                 // Award pot to winner
                                 const showdownPlayers = updatedPlayers.map(p => {
@@ -1354,7 +1386,7 @@ export function usePokerGame(tableId: string) {
                                     return { ...p, currentBet: 0, status: p.chips > 0 ? 'Active' : 'Folded' };
                                 });
 
-                                // Show winner phase with all community cards visible
+                                // Show winner phase with all community cards and player cards visible
                                 const showdownState: PokerGameState = {
                                     ...currentState,
                                     players: showdownPlayers,
@@ -1367,7 +1399,9 @@ export function usePokerGame(tableId: string) {
                                         name: winner.name,
                                         amount: totalPot,
                                         reason: 'showdown',
+                                        handRank: winnerHandRank,
                                     },
+                                    showdownCards, // Reveal all player cards at showdown
                                 };
 
                                 broadcastState(showdownState);

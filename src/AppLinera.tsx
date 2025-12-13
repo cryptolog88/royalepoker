@@ -731,7 +731,7 @@ const AppLinera: React.FC = () => {
 
                     {/* Winner Celebration Overlay */}
                     {gameState?.phase === 'Winner' && gameState?.winner && (
-                        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/80 backdrop-blur-md rounded-[150px]">
+                        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/80 backdrop-blur-md rounded-[150px] overflow-y-auto py-8">
                             <div className="relative">
                                 {/* Confetti effect */}
                                 <div className="absolute -top-20 left-1/2 -translate-x-1/2 text-8xl animate-bounce">
@@ -743,9 +743,15 @@ const AppLinera: React.FC = () => {
                                     <p className="text-amber-400 text-sm uppercase tracking-widest mb-2 font-semibold">
                                         {gameState.winner.reason === 'fold' ? 'Winner by Fold' : 'Showdown Winner'}
                                     </p>
-                                    <h2 className="text-4xl font-serif font-bold text-white mb-4">
+                                    <h2 className="text-4xl font-serif font-bold text-white mb-2">
                                         {gameState.winner.name}
                                     </h2>
+                                    {/* Show winning hand rank for showdown */}
+                                    {gameState.winner.reason === 'showdown' && gameState.winner.handRank && (
+                                        <p className="text-xl text-amber-300 font-semibold mb-2">
+                                            {gameState.winner.handRank}
+                                        </p>
+                                    )}
                                     <div className="flex items-center justify-center gap-2 mb-4">
                                         <span className="text-2xl">💰</span>
                                         <span className="text-3xl font-bold text-emerald-400 font-mono">
@@ -757,6 +763,39 @@ const AppLinera: React.FC = () => {
                                     </p>
                                 </div>
                             </div>
+
+                            {/* Show player cards at showdown (only when reason is 'showdown') */}
+                            {gameState.winner.reason === 'showdown' && gameState.showdownCards && gameState.showdownCards.length > 0 && (
+                                <div className="mt-6">
+                                    <p className="text-center text-slate-400 text-sm mb-3 uppercase tracking-wider">Showdown Cards</p>
+                                    <div className="flex gap-6 justify-center flex-wrap">
+                                        {gameState.showdownCards.map((sc, i) => (
+                                            <div
+                                                key={i}
+                                                className={`p-4 rounded-xl border ${sc.playerName === gameState.winner?.name
+                                                    ? 'bg-amber-500/20 border-amber-500'
+                                                    : 'bg-slate-800/50 border-slate-700'
+                                                    }`}
+                                            >
+                                                <p className={`text-sm font-semibold mb-2 text-center ${sc.playerName === gameState.winner?.name ? 'text-amber-400' : 'text-white'
+                                                    }`}>
+                                                    {sc.playerName}
+                                                </p>
+                                                {/* Player's hole cards */}
+                                                <div className="flex gap-1 justify-center mb-2">
+                                                    {sc.cards.map((card, ci) => (
+                                                        <PlayingCard key={ci} card={card} size="small" />
+                                                    ))}
+                                                </div>
+                                                <p className={`text-xs text-center font-medium ${sc.playerName === gameState.winner?.name ? 'text-amber-300' : 'text-slate-400'
+                                                    }`}>
+                                                    {sc.handRank}
+                                                </p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
 
                             {/* Show final chips for all players */}
                             <div className="mt-6 flex gap-4">
