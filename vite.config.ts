@@ -45,8 +45,6 @@ export default defineConfig(({ mode }) => {
       topLevelAwait(),
     ],
     define: {
-      'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-      'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
       'import.meta.env.VITE_LINERA_RPC_ENDPOINT': JSON.stringify(env.VITE_LINERA_RPC_ENDPOINT),
       'import.meta.env.VITE_LINERA_APP_ID': JSON.stringify(env.VITE_LINERA_APP_ID),
       'import.meta.env.VITE_LINERA_CHAIN_ID': JSON.stringify(env.VITE_LINERA_CHAIN_ID)

@@ -1437,7 +1437,7 @@ This multiplayer poker implementation on Linera blockchain provides:
 2. **Add Chat System** - In-game communication
 3. **Statistics & Analytics** - Player performance tracking
 4. **Mobile Support** - React Native client
-5. **AI Opponents** - Practice mode with bots
+5. **Practice Mode** - Training mode with bots
 
 ---
 
