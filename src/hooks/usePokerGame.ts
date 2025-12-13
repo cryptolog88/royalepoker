@@ -778,11 +778,14 @@ export function usePokerGame(tableId: string) {
                 // HYBRID APPROACH: Get player chips with priority
                 // 1. Arena blockchain (primary source of truth)
                 // 2. localStorage (fallback)
-                // 3. Room buy-in (default for new players)
+                // 3. New player bonus (only for Rookie Lounge)
                 // ============================================================
                 console.log('[JoinTable] Getting player chips with hybrid approach...');
 
-                let playerChips = buyIn; // Default to room buy-in
+                const ROOKIE_LOUNGE_BUYIN = 1000; // Rookie Lounge min buy-in
+                const NEW_PLAYER_BONUS = 1000; // Free chips for new players
+
+                let playerChips = 0;
                 let isExistingPlayer = false;
 
                 // Priority 1: Query from Arena blockchain
@@ -799,21 +802,37 @@ export function usePokerGame(tableId: string) {
                         isExistingPlayer = true;
                         console.log('[JoinTable] Using chips from localStorage:', playerChips);
                     } else {
-                        // Priority 3: Use room buy-in (new player)
-                        console.log('[JoinTable] New player, using room buy-in:', playerChips);
+                        // Priority 3: New player - no chips yet
+                        console.log('[JoinTable] New player detected, no existing chips');
                     }
                 }
 
                 // ============================================================
-                // VALIDATION: Check if player has enough chips for this room
-                // Existing players must have >= min buy-in to join higher rooms
+                // VALIDATION: Room access rules
+                // - New players: Can ONLY join Rookie Lounge, get 1000 free chips
+                // - Existing players: Must have >= min buy-in for the room
                 // ============================================================
-                if (isExistingPlayer && playerChips < buyIn) {
-                    const errorMsg = `Insufficient chips! You have ${playerChips.toLocaleString()} chips but this room requires minimum ${buyIn.toLocaleString()} chips.`;
-                    console.log('[JoinTable] ❌', errorMsg);
-                    setError(errorMsg);
-                    setIsLoading(false);
-                    return false;
+                if (!isExistingPlayer) {
+                    // New player - can only join Rookie Lounge
+                    if (buyIn !== ROOKIE_LOUNGE_BUYIN) {
+                        const errorMsg = `New players can only join Rookie Lounge! Play there first to earn chips.`;
+                        console.log('[JoinTable] ❌', errorMsg);
+                        setError(errorMsg);
+                        setIsLoading(false);
+                        return false;
+                    }
+                    // Give new player bonus chips
+                    playerChips = NEW_PLAYER_BONUS;
+                    console.log('[JoinTable] 🎁 New player bonus:', playerChips, 'chips');
+                } else {
+                    // Existing player - check if they have enough chips
+                    if (playerChips < buyIn) {
+                        const errorMsg = `Insufficient chips! You have ${playerChips.toLocaleString()} chips but this room requires minimum ${buyIn.toLocaleString()} chips.`;
+                        console.log('[JoinTable] ❌', errorMsg);
+                        setError(errorMsg);
+                        setIsLoading(false);
+                        return false;
+                    }
                 }
 
                 // Add player to state
