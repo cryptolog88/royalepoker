@@ -1,0 +1,37 @@
+{
+  "name": "royale-poker",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:linera": "vite --config vite.config.ts --mode linera",
+    "build": "vite build",
+    "build:linera": "vite build --mode linera",
+    "preview": "vite preview",
+    "server": "node server.js",
+    "dev:full": "node server.js & vite",
+    "contract:build": "bash build.sh",
+    "contract:deploy": "bash deploy.sh"
+  },
+  "dependencies": {
+    "@apollo/client": "^4.0.10",
+    "@linera/client": "0.15.6",
+    "@linera/signer": "0.15.6",
+    "ethers": "^6.13.0",
+    "graphql": "^16.12.0",
+    "http-proxy": "^1.18.1",
+    "lucide-react": "^0.556.0",
+    "react": "^19.2.1",
+    "react-dom": "^19.2.1",
+    "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.2",
+    "@vitejs/plugin-react": "^5.0.0",
+    "typescript": "~5.8.2",
+    "vite": "^6.2.0",
+    "vite-plugin-top-level-await": "^1.6.0",
+    "vite-plugin-wasm": "^3.5.0"
+  }
+}

@@ -1,0 +1,35 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+target/
+*.wasm
+
+# Environment files (contains secrets)
+.env.local
+
+# Cargo lock (regenerated on build)
+Cargo.lock
+
+# IDE
+.vscode/
+.idea/
+
+# Linera wallet data (contains private keys)
+.linera/
+.linera.backup/
+
+# Backup files
+*.backup
+.cargo/config.toml.backup
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# DeadKeys (separate project, not part of poker)
+deadkeys/

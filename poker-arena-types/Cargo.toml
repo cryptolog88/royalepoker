@@ -1,0 +1,9 @@
+[package]
+name = "poker-arena-types"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+async-graphql.workspace = true
+linera-sdk.workspace = true
+serde.workspace = true
