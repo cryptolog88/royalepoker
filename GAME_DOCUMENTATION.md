@@ -1,62 +1,62 @@
 # 🎮 Royale Poker - Game Documentation
 
-Dokumentasi lengkap tentang mekanisme permainan dan proses update chips.
+Complete documentation about game mechanics and chips update process.
 
-## 📖 Daftar Isi
+## 📖 Table of Contents
 
-1. [Alur Permainan](#alur-permainan)
+1. [Game Flow](#game-flow)
 2. [Room & Buy-in](#room--buy-in)
-3. [Fase Permainan](#fase-permainan)
-4. [Aksi Pemain](#aksi-pemain)
-5. [Proses Update Chips](#proses-update-chips)
+3. [Game Phases](#game-phases)
+4. [Player Actions](#player-actions)
+5. [Chips Update Process](#chips-update-process)
 6. [Leaderboard System](#leaderboard-system)
-7. [Arsitektur Teknis](#arsitektur-teknis)
+7. [Technical Architecture](#technical-architecture)
 
 ---
 
-## 🎯 Alur Permainan
+## 🎯 Game Flow
 
-### 1. Koneksi Wallet
+### 1. Wallet Connection
 ```
-User membuka aplikasi
+User opens application
     ↓
-Auto-create Linera wallet (jika belum ada)
+Auto-create Linera wallet (if not exists)
     ↓
-Claim chain dari faucet
+Claim chain from faucet
     ↓
-Wallet siap digunakan
-```
-
-### 2. Masuk Lobby
-```
-User melihat 4 room tersedia
-    ↓
-Pilih room sesuai level
-    ↓
-Masukkan nama pemain
-    ↓
-Klik "Join Table"
-    ↓
-Chips sesuai buy-in room ditambahkan
+Wallet ready to use
 ```
 
-### 3. Bermain
+### 2. Enter Lobby
 ```
-Minimal 2 pemain untuk mulai
+User sees 4 available rooms
     ↓
-Klik "Start Game"
+Select room based on level
     ↓
-Kartu dibagikan (2 kartu per pemain)
+Enter player name
+    ↓
+Click "Join Table"
+    ↓
+Chips added according to room buy-in
+```
+
+### 3. Playing
+```
+Minimum 2 players to start
+    ↓
+Click "Start Game"
+    ↓
+Cards dealt (2 cards per player)
     ↓
 Betting rounds (PreFlop → Flop → Turn → River)
     ↓
-Showdown atau semua fold
+Showdown or all fold
     ↓
-Pemenang diumumkan
+Winner announced
     ↓
-Chips di-update
+Chips updated
     ↓
-Leaderboard di-update
+Leaderboard updated
 ```
 
 ---
@@ -65,24 +65,24 @@ Leaderboard di-update
 
 | Room | Small Blind | Big Blind | Buy-in | Level |
 |------|-------------|-----------|--------|-------|
-| **Rookie Lounge** | 10 | 20 | 1,000 | Pemula |
+| **Rookie Lounge** | 10 | 20 | 1,000 | Beginner |
 | **Vegas Strip** | 50 | 100 | 5,000 | Pro |
 | **Macau High Roller** | 200 | 400 | 20,000 | Elite |
 | **Royale VIP** | 500 | 1,000 | 50,000 | Legend |
 
-### Cara Kerja Buy-in
+### How Buy-in Works
 
 ```typescript
-// Saat player join table
+// When player joins table
 const handleJoinTable = async () => {
     const buyIn = activeRoom?.minBuyIn || 1000;
     await joinTable(playerName, buyIn);
 };
 
-// Di usePokerGame.ts
+// In usePokerGame.ts
 const newPlayer: PlayerInfo = {
     name: playerName,
-    chips: buyIn,  // Chips sesuai room
+    chips: buyIn,  // Chips according to room
     status: 'Active',
     currentBet: 0,
     chainId: playerChainId,
@@ -91,20 +91,20 @@ const newPlayer: PlayerInfo = {
 
 ---
 
-## 🃏 Fase Permainan
+## 🃏 Game Phases
 
 ### 1. Waiting
-- Menunggu pemain bergabung
-- Minimal 2 pemain untuk mulai
+- Waiting for players to join
+- Minimum 2 players to start
 
 ### 2. PreFlop
-- Setiap pemain menerima 2 kartu tertutup
-- Blind posting berdasarkan posisi relatif terhadap dealer:
-  - **Heads-up (2 pemain)**: Dealer = Small Blind, pemain lain = Big Blind
-  - **3+ pemain**: Dealer → SB (dealer+1) → BB (dealer+2)
-- First-to-act di PreFlop:
-  - **Heads-up**: Small Blind (Dealer) bertindak pertama
-  - **3+ pemain**: UTG (pemain setelah Big Blind) bertindak pertama
+- Each player receives 2 hole cards
+- Blind posting based on position relative to dealer:
+  - **Heads-up (2 players)**: Dealer = Small Blind, other player = Big Blind
+  - **3+ players**: Dealer → SB (dealer+1) → BB (dealer+2)
+- First-to-act in PreFlop:
+  - **Heads-up**: Small Blind (Dealer) acts first
+  - **3+ players**: UTG (player after Big Blind) acts first
 
 ```typescript
 // Posting blinds - relative to dealer position
@@ -130,51 +130,51 @@ players: currentState.players.map((p, idx) => {
 ```
 
 ### 3. Flop
-- 3 kartu komunitas dibuka
-- Betting round baru (currentBet reset ke 0)
-- First-to-act: Pemain aktif pertama setelah dealer
+- 3 community cards revealed
+- New betting round (currentBet reset to 0)
+- First-to-act: First active player after dealer
 
 ### 4. Turn
-- 1 kartu komunitas ke-4 dibuka
-- Betting round baru
-- First-to-act: Pemain aktif pertama setelah dealer
+- 4th community card revealed
+- New betting round
+- First-to-act: First active player after dealer
 
 ### 5. River
-- 1 kartu komunitas ke-5 (terakhir) dibuka
-- Betting round terakhir
-- First-to-act: Pemain aktif pertama setelah dealer
+- 5th (final) community card revealed
+- Final betting round
+- First-to-act: First active player after dealer
 
 ### 6. Showdown
-- Semua kartu dibuka
-- Tangan dievaluasi menggunakan hand evaluator lengkap
-- Ranking tangan (tertinggi ke terendah):
-  1. **Royal Flush** - A-K-Q-J-10 suit sama
-  2. **Straight Flush** - 5 kartu berurutan suit sama
-  3. **Four of a Kind** - 4 kartu rank sama
+- All cards revealed
+- Hands evaluated using complete hand evaluator
+- Hand rankings (highest to lowest):
+  1. **Royal Flush** - A-K-Q-J-10 same suit
+  2. **Straight Flush** - 5 consecutive cards same suit
+  3. **Four of a Kind** - 4 cards same rank
   4. **Full House** - Three of a Kind + Pair
-  5. **Flush** - 5 kartu suit sama
-  6. **Straight** - 5 kartu berurutan (termasuk A-2-3-4-5 wheel)
-  7. **Three of a Kind** - 3 kartu rank sama
-  8. **Two Pair** - 2 pasang kartu
-  9. **One Pair** - 1 pasang kartu
-  10. **High Card** - Kartu tertinggi
-- Pot diberikan ke pemenang
+  5. **Flush** - 5 cards same suit
+  6. **Straight** - 5 consecutive cards (including A-2-3-4-5 wheel)
+  7. **Three of a Kind** - 3 cards same rank
+  8. **Two Pair** - 2 pairs of cards
+  9. **One Pair** - 1 pair of cards
+  10. **High Card** - Highest card
+- Pot awarded to winner
 
 ### 7. Winner
-- Menampilkan pemenang selama 5 detik
-- Chips pemenang di-update
-- Leaderboard di-update
+- Winner displayed for 5 seconds
+- Winner's chips updated
+- Leaderboard updated
 
 ### 8. ReadyForNextHand
-- Siap untuk hand berikutnya
-- Pemain bisa klik "Deal Next Hand"
+- Ready for next hand
+- Players can click "Deal Next Hand"
 
 ---
 
-## 🎬 Aksi Pemain
+## 🎬 Player Actions
 
 ### Fold
-Menyerah dari hand ini. Kehilangan semua taruhan yang sudah dipasang.
+Give up on this hand. Lose all bets already placed.
 
 ```typescript
 case 'fold':
@@ -182,19 +182,19 @@ case 'fold':
 ```
 
 ### Check
-Tidak bertaruh (hanya bisa jika tidak ada taruhan sebelumnya).
+No bet (only possible if no previous bet).
 
 ```typescript
 case 'check':
-    return p;  // Tidak ada perubahan
+    return p;  // No change
 ```
 
 ### Call
-Menyamakan taruhan pemain sebelumnya.
+Match the previous player's bet.
 
 ```typescript
 case 'call': {
-    // Hitung jumlah yang harus dibayar
+    // Calculate amount to pay
     const callAmount = Math.min(
         p.chips, 
         Math.max(0, currentState.currentBet - p.currentBet)
@@ -211,7 +211,7 @@ case 'call': {
 ```
 
 ### Raise
-Menaikkan taruhan.
+Increase the bet.
 
 ```typescript
 case 'raise': {
@@ -232,7 +232,7 @@ case 'raise': {
 ```
 
 ### All-In
-Memasang semua chips yang tersisa.
+Bet all remaining chips.
 
 ```typescript
 case 'allin': {
@@ -249,11 +249,11 @@ case 'allin': {
 
 ---
 
-## 💰 Proses Update Chips
+## 💰 Chips Update Process
 
-### 1. Saat Betting
+### 1. During Betting
 
-Setiap aksi betting mengurangi chips pemain dan menambah pot:
+Each betting action reduces player chips and adds to pot:
 
 ```
 Player chips: 1000
@@ -271,23 +271,23 @@ Result:
 - Pot: increased by 100
 ```
 
-### 2. Saat Ada Pemenang (Fold)
+### 2. When Winner by Fold
 
-Jika semua pemain lain fold:
+If all other players fold:
 
 ```typescript
-// Hanya 1 pemain tersisa
+// Only 1 player remaining
 const playersStillIn = updatedPlayers.filter(p => p.status !== 'Folded');
 if (playersStillIn.length === 1) {
     const winner = playersStillIn[0];
     const totalPot = currentState.pot + potIncrease;
     
-    // Winner mendapat pot
+    // Winner gets pot
     const finalPlayers = updatedPlayers.map(p => {
         if (p.name === winner.name) {
             return { 
                 ...p, 
-                chips: p.chips + totalPot,  // Tambah pot ke chips
+                chips: p.chips + totalPot,  // Add pot to chips
                 currentBet: 0 
             };
         }
@@ -296,12 +296,12 @@ if (playersStillIn.length === 1) {
 }
 ```
 
-### 3. Saat Showdown
+### 3. At Showdown
 
-Jika sampai showdown, tangan terbaik menang menggunakan hand evaluator lengkap:
+If reaching showdown, best hand wins using complete hand evaluator:
 
 ```typescript
-// Evaluasi tangan semua pemain menggunakan evaluateBestHand
+// Evaluate all players' hands using evaluateBestHand
 const playerHands = playersInShowdown.map((player, idx) => {
     const playerIdx = updatedPlayers.findIndex(p => p.name === player.name);
     const holeCards = currentState.dealtCards?.playerCards?.[playerIdx] || [];
@@ -314,32 +314,32 @@ const playerHands = playersInShowdown.map((player, idx) => {
     };
 });
 
-// Bandingkan tangan untuk menentukan pemenang
+// Compare hands to determine winner
 let winners = [playerHands[0]];
 for (let i = 1; i < playerHands.length; i++) {
     const comparison = compareHands(playerHands[i].bestHand, winners[0].bestHand);
     if (comparison > 0) {
-        winners = [playerHands[i]]; // Pemenang baru
+        winners = [playerHands[i]]; // New winner
     } else if (comparison === 0) {
         winners.push(playerHands[i]); // Tie
     }
 }
 
-// Winner mendapat pot
+// Winner gets pot
 const winner = winners[0].player;
 winner.chips += totalPot;
 ```
 
-### 4. Broadcast ke Semua Client
+### 4. Broadcast to All Clients
 
-Setelah chips di-update, state di-broadcast via WebSocket:
+After chips updated, state is broadcast via WebSocket:
 
 ```typescript
 const broadcastState = (newState: PokerGameState) => {
     // Update local state
     setGameState(newState);
     
-    // Broadcast ke semua client di room
+    // Broadcast to all clients in room
     wsRef.current.send(JSON.stringify({
         type: 'UPDATE_STATE',
         roomId: tableId,
@@ -354,7 +354,7 @@ const broadcastState = (newState: PokerGameState) => {
 
 ### Local Leaderboard (In-Memory)
 
-Disimpan di `globalLeaderboard` Map dan localStorage:
+Stored in `globalLeaderboard` Map and localStorage:
 
 ```typescript
 // Update local cache
@@ -365,13 +365,13 @@ globalLeaderboard.set(playerName, {
     lastUpdated: Date.now()
 });
 
-// Persist ke localStorage
+// Persist to localStorage
 localStorage.setItem('poker_leaderboard_v2', JSON.stringify(data));
 ```
 
 ### Blockchain Leaderboard (Arena)
 
-Update dikirim langsung ke Arena via HTTP:
+Updates sent directly to Arena via HTTP:
 
 ```typescript
 const updateBlockchainLeaderboard = async (
@@ -407,14 +407,14 @@ const updateBlockchainLeaderboard = async (
 };
 ```
 
-### Kapan Leaderboard Di-update?
+### When is Leaderboard Updated?
 
-1. **Saat Join Table** - Initial chips
-2. **Saat Menang Hand** - Winner mendapat +1 handsWon
-3. **Saat Hand Selesai** - Semua pemain mendapat +1 handsPlayed
+1. **On Join Table** - Initial chips
+2. **On Win Hand** - Winner gets +1 handsWon
+3. **On Hand Complete** - All players get +1 handsPlayed
 
 ```typescript
-// Di broadcastState
+// In broadcastState
 if (newState.phase === 'Winner' && newState.winner) {
     const winner = newState.players.find(p => p.name === newState.winner?.name);
     if (winner && winner.chips > 0) {
@@ -440,7 +440,7 @@ if (newState.phase === 'ReadyForNextHand') {
 
 ---
 
-## 🔧 Arsitektur Teknis
+## 🔧 Technical Architecture
 
 ### Data Flow
 
@@ -476,7 +476,7 @@ if (newState.phase === 'ReadyForNextHand') {
 
 ### Contract Structure
 
-Kedua contract mengikuti pola DeadKeys dengan file terpisah:
+Both contracts follow the DeadKeys pattern with separate files:
 
 ```
 poker-contract/src/
@@ -498,23 +498,23 @@ poker-arena/src/
 
 ### State Synchronization
 
-1. **WebSocket** - Real-time game state sync antar browser
-2. **HTTP Mutations** - Persist ke blockchain
-3. **localStorage** - Backup leaderboard offline
+1. **WebSocket** - Real-time game state sync between browsers
+2. **HTTP Mutations** - Persist to blockchain
+3. **localStorage** - Offline leaderboard backup
 
 ### Deterministic Card Shuffling
 
-Kartu di-shuffle menggunakan seeded random untuk memastikan semua client mendapat hasil yang sama:
+Cards are shuffled using seeded random to ensure all clients get the same result:
 
 ```typescript
-// Generate seed dari game state
+// Generate seed from game state
 const generateHandSeed = (tableId: string, handNumber: number, playerAddresses: string[]): number => {
     const sortedPlayers = [...playerAddresses].sort().join(',');
     const seedString = `${tableId}:${handNumber}:${sortedPlayers}`;
     return hashString(seedString);
 };
 
-// Fisher-Yates shuffle dengan seed
+// Fisher-Yates shuffle with seed
 const shuffleDeck = (seed: number): Card[] => {
     const deck = createDeck();
     const rng = new SeededRandom(seed);
@@ -530,9 +530,9 @@ const shuffleDeck = (seed: number): Card[] => {
 
 ---
 
-## 📊 Contoh Skenario
+## 📊 Example Scenarios
 
-### Skenario 1: Player A Menang via Fold
+### Scenario 1: Player A Wins via Fold
 
 ```
 Initial:
@@ -562,7 +562,7 @@ Leaderboard Update:
 - Player B: 980 chips, handsWon: 0, handsPlayed: 1
 ```
 
-### Skenario 2: Showdown
+### Scenario 2: Showdown
 
 ```
 Initial:
@@ -592,7 +592,7 @@ Leaderboard Update:
 
 ## 🎲 Hand Evaluator
 
-Aplikasi menggunakan hand evaluator lengkap yang diimplementasikan di frontend (`src/hooks/usePokerGame.ts`):
+The application uses a complete hand evaluator implemented in frontend (`src/hooks/usePokerGame.ts`):
 
 ```typescript
 // Hand rankings (higher = better)
@@ -616,19 +616,19 @@ const evaluateBestHand = (holeCards: Card[], communityCards: Card[]): { rank: nu
 const compareHands = (hand1, hand2): number
 ```
 
-Fitur:
-- Evaluasi semua kombinasi 5 kartu dari 7 kartu
-- Support untuk A-2-3-4-5 wheel straight
-- Perbandingan kicker untuk tie-breaker
+Features:
+- Evaluates all 5-card combinations from 7 cards
+- Support for A-2-3-4-5 wheel straight
+- Kicker comparison for tie-breaker
 
 ---
 
 ## 🔗 Links
 
-- [README.md](./README.md) - Overview dan quick start
-- [linera-poker-implementation.md](./linera-poker-implementation.md) - Dokumentasi implementasi teknis detail
-- [Linera Documentation](https://linera.dev) - Dokumentasi Linera
+- [README.md](./README.md) - Overview and quick start
+- [linera-poker-implementation.md](./linera-poker-implementation.md) - Detailed technical implementation documentation
+- [Linera Documentation](https://linera.dev) - Linera Documentation
 
 ---
 
-**Last Updated**: Desember 2024
+**Last Updated**: December 2024
