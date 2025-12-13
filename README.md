@@ -1,3 +1,5 @@
+<div align="center">
+
 # 🃏 Royale Poker
 
 **Decentralized Texas Hold'em Poker on Linera Blockchain**
