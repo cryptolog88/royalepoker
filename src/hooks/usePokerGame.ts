@@ -16,6 +16,65 @@ const ARENA_APP_ID = import.meta.env.VITE_ARENA_APP_ID;
 // v2: Added proper chainId tracking per player
 const LEADERBOARD_STORAGE_KEY = 'poker_leaderboard_v2';
 
+// Helper to query player chips from Arena blockchain
+const getPlayerChipsFromArena = async (playerName: string): Promise<number | null> => {
+    if (!SERVICE_URL || !ARENA_CHAIN_ID || !ARENA_APP_ID) {
+        console.log('[Arena] Missing config, skipping blockchain query');
+        return null;
+    }
+
+    try {
+        const url = `${SERVICE_URL}/chains/${ARENA_CHAIN_ID}/applications/${ARENA_APP_ID}`;
+        console.log('[Arena] Querying player chips from:', url, 'for player:', playerName);
+
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                query: `query { player(name: "${playerName}") { chips } }`
+            }),
+        });
+
+        if (!response.ok) {
+            console.warn('[Arena] HTTP error:', response.status);
+            return null;
+        }
+
+        const result = await response.json();
+        console.log('[Arena] Query result:', result);
+
+        if (result?.data?.player?.chips) {
+            const chips = parseInt(result.data.player.chips, 10);
+            console.log('[Arena] Found player chips:', chips);
+            return chips > 0 ? chips : null;
+        }
+
+        console.log('[Arena] Player not found in Arena');
+        return null;
+    } catch (err) {
+        console.error('[Arena] Failed to query player chips:', err);
+        return null;
+    }
+};
+
+// Helper to get player chips from localStorage
+const getPlayerChipsFromLocalStorage = (playerName: string): number | null => {
+    try {
+        const data = localStorage.getItem(LEADERBOARD_STORAGE_KEY);
+        if (data) {
+            const parsed = JSON.parse(data);
+            if (parsed[playerName]?.chips) {
+                const chips = parsed[playerName].chips;
+                console.log('[LocalStorage] Found player chips:', chips);
+                return chips > 0 ? chips : null;
+            }
+        }
+    } catch (e) {
+        console.error('[LocalStorage] Failed to read chips:', e);
+    }
+    return null;
+};
+
 // Helper to update local leaderboard cache AND localStorage
 const updateLocalLeaderboard = (players: { address: string; name: string; chips: number; chainId?: string }[]) => {
     console.log('[Leaderboard] updateLocalLeaderboard called with', players.length, 'players');
@@ -688,14 +747,41 @@ export function usePokerGame(tableId: string) {
                     return false;
                 }
 
+                // ============================================================
+                // HYBRID APPROACH: Get player chips with priority
+                // 1. Arena blockchain (primary source of truth)
+                // 2. localStorage (fallback)
+                // 3. Room buy-in (default for new players)
+                // ============================================================
+                console.log('[JoinTable] Getting player chips with hybrid approach...');
+
+                let playerChips = buyIn; // Default to room buy-in
+
+                // Priority 1: Query from Arena blockchain
+                const arenaChips = await getPlayerChipsFromArena(playerName);
+                if (arenaChips !== null && arenaChips > 0) {
+                    playerChips = arenaChips;
+                    console.log('[JoinTable] Using chips from Arena blockchain:', playerChips);
+                } else {
+                    // Priority 2: Check localStorage
+                    const localChips = getPlayerChipsFromLocalStorage(playerName);
+                    if (localChips !== null && localChips > 0) {
+                        playerChips = localChips;
+                        console.log('[JoinTable] Using chips from localStorage:', playerChips);
+                    } else {
+                        // Priority 3: Use room buy-in (new player)
+                        console.log('[JoinTable] New player, using room buy-in:', playerChips);
+                    }
+                }
+
                 // Add player to state
                 const playerChainIdValue = chainId || '';
-                console.log('[JoinTable] Creating player - name:', playerName, 'buyIn:', buyIn, 'chainId:', playerChainIdValue);
+                console.log('[JoinTable] Creating player - name:', playerName, 'chips:', playerChips, 'chainId:', playerChainIdValue);
 
                 const newPlayer: PlayerInfo = {
                     address: chainId || playerName,
                     name: playerName,
-                    chips: buyIn,
+                    chips: playerChips,
                     status: 'Active',
                     currentBet: 0,
                     chainId: playerChainIdValue, // Store actual chain ID
@@ -709,9 +795,9 @@ export function usePokerGame(tableId: string) {
 
                 broadcastState(newState);
 
-                // Update leaderboard with initial chips (include chainId)
+                // Update leaderboard with player chips (include chainId)
                 const playerChainId = chainId || playerName;
-                updateBlockchainLeaderboard(playerName, buyIn, playerChainId);
+                updateBlockchainLeaderboard(playerName, playerChips, playerChainId);
 
                 // Save to blockchain via HTTP (DeadKeys pattern)
                 try {
@@ -1170,16 +1256,16 @@ export function usePokerGame(tableId: string) {
                                     const playerIdx = updatedPlayers.findIndex(p => p.name === player.name);
                                     const holeCards = currentState.dealtCards?.playerCards?.[playerIdx] || [];
                                     const bestHand = evaluateBestHand(holeCards, newCommunityCards);
-                                    
+
                                     console.log('[Showdown] Player:', player.name, 'Hand rank:', bestHand.rank, 'High cards:', bestHand.highCards);
-                                    
+
                                     return {
                                         player,
                                         holeCards,
                                         bestHand,
                                     };
                                 });
-                                
+
                                 // Find the winner(s) - could be multiple in case of tie
                                 let winners = [playerHands[0]];
                                 for (let i = 1; i < playerHands.length; i++) {
@@ -1192,11 +1278,11 @@ export function usePokerGame(tableId: string) {
                                         winners.push(playerHands[i]);
                                     }
                                 }
-                                
+
                                 // For now, just take first winner (TODO: split pot for ties)
                                 const winner = winners[0].player;
                                 const totalPot = currentState.pot + potIncrease;
-                                
+
                                 console.log('[Showdown] 🏆 Winner:', winner.name, 'with hand rank:', winners[0].bestHand.rank);
 
                                 // Award pot to winner
