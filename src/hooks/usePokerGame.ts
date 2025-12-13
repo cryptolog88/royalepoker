@@ -783,22 +783,37 @@ export function usePokerGame(tableId: string) {
                 console.log('[JoinTable] Getting player chips with hybrid approach...');
 
                 let playerChips = buyIn; // Default to room buy-in
+                let isExistingPlayer = false;
 
                 // Priority 1: Query from Arena blockchain
                 const arenaChips = await getPlayerChipsFromArena(playerName);
                 if (arenaChips !== null && arenaChips > 0) {
                     playerChips = arenaChips;
+                    isExistingPlayer = true;
                     console.log('[JoinTable] Using chips from Arena blockchain:', playerChips);
                 } else {
                     // Priority 2: Check localStorage
                     const localChips = getPlayerChipsFromLocalStorage(playerName);
                     if (localChips !== null && localChips > 0) {
                         playerChips = localChips;
+                        isExistingPlayer = true;
                         console.log('[JoinTable] Using chips from localStorage:', playerChips);
                     } else {
                         // Priority 3: Use room buy-in (new player)
                         console.log('[JoinTable] New player, using room buy-in:', playerChips);
                     }
+                }
+
+                // ============================================================
+                // VALIDATION: Check if player has enough chips for this room
+                // Existing players must have >= min buy-in to join higher rooms
+                // ============================================================
+                if (isExistingPlayer && playerChips < buyIn) {
+                    const errorMsg = `Insufficient chips! You have ${playerChips.toLocaleString()} chips but this room requires minimum ${buyIn.toLocaleString()} chips.`;
+                    console.log('[JoinTable] ❌', errorMsg);
+                    setError(errorMsg);
+                    setIsLoading(false);
+                    return false;
                 }
 
                 // Add player to state
