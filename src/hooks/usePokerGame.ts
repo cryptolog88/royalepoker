@@ -465,14 +465,41 @@ export function usePokerGame(tableId: string) {
                 const message = JSON.parse(event.data);
 
                 if (message.type === 'STATE_UPDATE' && message.state) {
-                    setGameState(message.state);
+                    let receivedState = message.state;
+
+                    // ============================================================
+                    // VALIDATION: If game is in active phase but < 2 players,
+                    // reset to Waiting phase (stale state from previous session)
+                    // ============================================================
+                    const activePhases = ['PreFlop', 'Flop', 'Turn', 'River', 'Showdown'];
+                    const playerCount = receivedState.players?.length || 0;
+
+                    if (activePhases.includes(receivedState.phase) && playerCount < 2) {
+                        console.log('[WebSocket] ⚠️ Invalid state detected: phase', receivedState.phase, 'with only', playerCount, 'player(s). Resetting to Waiting.');
+                        receivedState = {
+                            ...receivedState,
+                            phase: 'Waiting',
+                            pot: 0,
+                            currentBet: 0,
+                            communityCards: [],
+                            dealtCards: undefined,
+                            winner: undefined,
+                            players: receivedState.players?.map((p: PlayerInfo) => ({
+                                ...p,
+                                currentBet: 0,
+                                status: 'Active',
+                            })) || [],
+                        };
+                    }
+
+                    setGameState(receivedState);
                     // Sync leaderboard from received state (sync across browsers via WebSocket)
-                    if (message.state.leaderboard && message.state.leaderboard.length > 0) {
-                        syncLeaderboardFromState(message.state.leaderboard);
+                    if (receivedState.leaderboard && receivedState.leaderboard.length > 0) {
+                        syncLeaderboardFromState(receivedState.leaderboard);
                     }
                     // Also update from players
-                    if (message.state.players && message.state.players.length > 0) {
-                        updateLocalLeaderboard(message.state.players);
+                    if (receivedState.players && receivedState.players.length > 0) {
+                        updateLocalLeaderboard(receivedState.players);
                     }
                 } else if (message.type === 'ROOM_RESET') {
                     setGameState(getDefaultState());
