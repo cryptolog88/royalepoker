@@ -123,3 +123,143 @@ body {
         transform: translateY(0) scale(1);
     }
 }
+
+
+/* Floating animations for poker background decorations */
+@keyframes float-slow {
+
+    0%,
+    100% {
+        transform: translateY(0px) rotate(var(--rotate-start, 0deg));
+    }
+
+    50% {
+        transform: translateY(-15px) rotate(calc(var(--rotate-start, 0deg) + 3deg));
+    }
+}
+
+@keyframes float-medium {
+
+    0%,
+    100% {
+        transform: translateY(0px) translateX(0px) rotate(var(--rotate-start, 0deg));
+    }
+
+    33% {
+        transform: translateY(-10px) translateX(5px) rotate(calc(var(--rotate-start, 0deg) + 2deg));
+    }
+
+    66% {
+        transform: translateY(-5px) translateX(-5px) rotate(calc(var(--rotate-start, 0deg) - 2deg));
+    }
+}
+
+@keyframes float-fast {
+
+    0%,
+    100% {
+        transform: translateY(0px) translateX(0px) rotate(var(--rotate-start, 0deg));
+    }
+
+    25% {
+        transform: translateY(-8px) translateX(3px) rotate(calc(var(--rotate-start, 0deg) + 1deg));
+    }
+
+    50% {
+        transform: translateY(-12px) translateX(-2px) rotate(calc(var(--rotate-start, 0deg) + 3deg));
+    }
+
+    75% {
+        transform: translateY(-5px) translateX(4px) rotate(calc(var(--rotate-start, 0deg) - 1deg));
+    }
+}
+
+@keyframes float-drift {
+
+    0%,
+    100% {
+        transform: translateY(0px) translateX(0px) scale(1);
+    }
+
+    25% {
+        transform: translateY(-20px) translateX(10px) scale(1.02);
+    }
+
+    50% {
+        transform: translateY(-10px) translateX(-8px) scale(0.98);
+    }
+
+    75% {
+        transform: translateY(-25px) translateX(5px) scale(1.01);
+    }
+}
+
+@keyframes pulse-glow {
+
+    0%,
+    100% {
+        opacity: 0.03;
+        transform: scale(1);
+    }
+
+    50% {
+        opacity: 0.05;
+        transform: scale(1.1);
+    }
+}
+
+@keyframes spin-slow {
+    0% {
+        transform: rotate(0deg);
+    }
+
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+/* Animation utility classes */
+.animate-float-slow {
+    animation: float-slow 8s ease-in-out infinite;
+}
+
+.animate-float-medium {
+    animation: float-medium 6s ease-in-out infinite;
+}
+
+.animate-float-fast {
+    animation: float-fast 4s ease-in-out infinite;
+}
+
+.animate-float-drift {
+    animation: float-drift 12s ease-in-out infinite;
+}
+
+.animate-pulse-glow {
+    animation: pulse-glow 4s ease-in-out infinite;
+}
+
+.animate-spin-slow {
+    animation: spin-slow 20s linear infinite;
+}
+
+/* Animation delays for variety */
+.animation-delay-1000 {
+    animation-delay: 1s;
+}
+
+.animation-delay-2000 {
+    animation-delay: 2s;
+}
+
+.animation-delay-3000 {
+    animation-delay: 3s;
+}
+
+.animation-delay-4000 {
+    animation-delay: 4s;
+}
+
+.animation-delay-5000 {
+    animation-delay: 5s;
+}

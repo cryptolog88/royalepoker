@@ -8,6 +8,8 @@ const wss = new WebSocketServer({ server });
 // Store game states by room
 const gameStates = new Map();
 const roomClients = new Map();
+// Store chat messages by room (last 50 messages per room)
+const roomChats = new Map();
 
 // Helper to get player counts for all rooms
 const getRoomPlayerCounts = () => {
@@ -112,6 +114,47 @@ wss.on('connection', (ws) => {
                     }
                     // Broadcast updated room counts to all clients
                     broadcastRoomCounts();
+                    break;
+
+                case 'CHAT_MESSAGE':
+                    // Store and broadcast chat message
+                    const chatRoomId = message.roomId;
+                    const chatMsg = {
+                        id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                        playerName: message.playerName,
+                        message: message.message,
+                        timestamp: Date.now(),
+                        type: message.msgType || 'chat',
+                    };
+
+                    // Store message (keep last 50)
+                    if (!roomChats.has(chatRoomId)) {
+                        roomChats.set(chatRoomId, []);
+                    }
+                    const chatHistory = roomChats.get(chatRoomId);
+                    chatHistory.push(chatMsg);
+                    if (chatHistory.length > 50) {
+                        chatHistory.shift();
+                    }
+
+                    // Broadcast to all clients in room
+                    const chatClients = roomClients.get(chatRoomId);
+                    if (chatClients) {
+                        const chatBroadcast = JSON.stringify({ type: 'CHAT_MESSAGE', message: chatMsg });
+                        chatClients.forEach(client => {
+                            if (client.readyState === 1) {
+                                client.send(chatBroadcast);
+                            }
+                        });
+                    }
+                    console.log(`💬 [${chatRoomId}] ${message.playerName}: ${message.message}`);
+                    break;
+
+                case 'GET_CHAT_HISTORY':
+                    // Send chat history to requesting client
+                    const historyRoomId = message.roomId;
+                    const history = roomChats.get(historyRoomId) || [];
+                    ws.send(JSON.stringify({ type: 'CHAT_HISTORY', messages: history }));
                     break;
             }
         } catch (err) {

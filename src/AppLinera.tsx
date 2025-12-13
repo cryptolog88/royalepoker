@@ -9,20 +9,23 @@ import { useLinera } from './contexts/LineraContext';
 import {
     RefreshCw, Clock, LogOut, Users, Menu, X, HelpCircle,
     Volume2, VolumeX, Trophy, Crown, Skull, ArrowRight, User,
-    Copy, Check, ChevronDown, Wallet
+    Copy, Check, ChevronDown, Wallet, MessageCircle, History, Settings
 } from 'lucide-react';
 import { usePokerGame } from './hooks/usePokerGame';
 import { useSound, SoundType } from './hooks/useSound';
 import { Leaderboard } from './components/Leaderboard';
 import { WalletDropdown } from './components/WalletDropdown';
+import { ChatSystem, ChatButton } from './components/ChatSystem';
+import { HandHistory, HandHistoryButton } from './components/HandHistory';
+import { AutoActions, SitOutBadge } from './components/AutoActions';
 
 const TABLE_ID = 'main-table-1';
 
 const AVAILABLE_ROOMS: Room[] = [
-    { id: 'room-1', name: 'Rookie Lounge', playersCount: 0, maxPlayers: 4, smallBlind: 10, bigBlind: 20, minBuyIn: 1000, difficulty: 'Rookie', themeColor: 'from-blue-600 to-blue-900' },
-    { id: 'room-2', name: 'Vegas Strip', playersCount: 0, maxPlayers: 4, smallBlind: 50, bigBlind: 100, minBuyIn: 5000, difficulty: 'Pro', themeColor: 'from-emerald-600 to-emerald-900' },
-    { id: 'room-3', name: 'Macau High Roller', playersCount: 0, maxPlayers: 4, smallBlind: 200, bigBlind: 400, minBuyIn: 20000, difficulty: 'Elite', themeColor: 'from-rose-600 to-rose-900' },
-    { id: 'room-4', name: 'Royale VIP', playersCount: 0, maxPlayers: 4, smallBlind: 500, bigBlind: 1000, minBuyIn: 50000, difficulty: 'Legend', themeColor: 'from-amber-600 to-amber-900' },
+    { id: 'room-1', name: 'Rookie Lounge', playersCount: 0, maxPlayers: 8, smallBlind: 10, bigBlind: 20, minBuyIn: 1000, difficulty: 'Rookie', themeColor: 'from-blue-600 to-blue-900' },
+    { id: 'room-2', name: 'Vegas Strip', playersCount: 0, maxPlayers: 8, smallBlind: 50, bigBlind: 100, minBuyIn: 5000, difficulty: 'Pro', themeColor: 'from-emerald-600 to-emerald-900' },
+    { id: 'room-3', name: 'Macau High Roller', playersCount: 0, maxPlayers: 8, smallBlind: 200, bigBlind: 400, minBuyIn: 20000, difficulty: 'Elite', themeColor: 'from-rose-600 to-rose-900' },
+    { id: 'room-4', name: 'Royale VIP', playersCount: 0, maxPlayers: 8, smallBlind: 500, bigBlind: 1000, minBuyIn: 50000, difficulty: 'Legend', themeColor: 'from-amber-600 to-amber-900' },
 ];
 
 // WebSocket URL for room counts
@@ -136,11 +139,30 @@ const AppLinera: React.FC = () => {
         performAction,
         leaveTable,
         resetRoom,
+        // Chat
+        chatMessages,
+        unreadChatCount,
+        sendChatMessage,
+        sendActionMessage,
+        markChatAsRead,
+        setChatOpen,
+        // Hand History
+        handHistory,
+        recordHandToHistory,
+        // Auto Actions
+        autoActions,
+        updateAutoActions,
+        getAutoAction,
+        resetAutoActions,
     } = usePokerGame(currentTableId);
     const [localPlayers, setLocalPlayers] = useState<Player[]>([]);
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const [showHandRankings, setShowHandRankings] = useState(false);
     const [soundMuted, setSoundMuted] = useState(false);
+    // Chat & History UI state
+    const [isChatOpen, setIsChatOpen] = useState(false);
+    const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+    const [isAutoActionsOpen, setIsAutoActionsOpen] = useState(false);
     const { playSound } = useSound(soundMuted);
     const [raiseAmount, setRaiseAmount] = useState(100);
     const [timeLeft, setTimeLeft] = useState(20);
@@ -256,15 +278,43 @@ const AppLinera: React.FC = () => {
     }, [gameState?.phase, gameState?.dealtCards, gameState?.handNumber, gameState?.players, playerName]);
 
     // Play win sound when winner is announced (only once per winner)
+    // Also record hand to history
     useEffect(() => {
         if (gameState?.phase === 'Winner' && gameState?.winner) {
             const winnerKey = `${gameState.winner.name}-${gameState.handNumber || 0}`;
             if (lastWinnerAnnounced !== winnerKey) {
                 playSound('win');
                 setLastWinnerAnnounced(winnerKey);
+
+                // Record hand to history
+                if (recordHandToHistory && gameState.handNumber) {
+                    const playersForHistory = gameState.players.map(p => ({
+                        name: p.name,
+                        cards: gameState.showdownCards?.find(sc => sc.playerName === p.name)?.cards?.map(c => ({
+                            rank: c.rank,
+                            suit: c.suit,
+                            value: c.value || 0,
+                        })),
+                        finalChips: p.chips,
+                        status: p.status,
+                    }));
+
+                    recordHandToHistory(
+                        gameState.handNumber,
+                        playersForHistory,
+                        gameState.communityCards || [],
+                        gameState.pot || gameState.winner.amount,
+                        {
+                            name: gameState.winner.name,
+                            amount: gameState.winner.amount,
+                            handRank: gameState.winner.handRank,
+                            reason: gameState.winner.reason,
+                        }
+                    );
+                }
             }
         }
-    }, [gameState?.phase, gameState?.winner, gameState?.handNumber, playSound, lastWinnerAnnounced]);
+    }, [gameState?.phase, gameState?.winner, gameState?.handNumber, playSound, lastWinnerAnnounced, recordHandToHistory, gameState?.players, gameState?.communityCards, gameState?.showdownCards, gameState?.pot]);
 
     // IMPORTANT: ALL useCallback hooks MUST be before any conditional returns (React Rules of Hooks)
     const handleAction = useCallback(async (action: string, amount?: number) => {
@@ -279,6 +329,11 @@ const AppLinera: React.FC = () => {
             playSound(soundMap[action]);
         }
 
+        // Send action message for chat/history
+        if (sendActionMessage) {
+            sendActionMessage(playerName, action, amount);
+        }
+
         const actionObj = action === 'raise'
             ? { Raise: { amount: amount || 0 } }
             : action === 'fold' ? 'Fold'
@@ -288,7 +343,12 @@ const AppLinera: React.FC = () => {
 
         // Pass playerName so the action is associated with the correct player
         await performAction(actionObj, playerName);
-    }, [performAction, playerName, playSound]);
+
+        // Reset one-time auto actions after use
+        if (resetAutoActions) {
+            resetAutoActions();
+        }
+    }, [performAction, playerName, playSound, sendActionMessage, resetAutoActions]);
 
     // Keep ref updated with latest handleAction
     useEffect(() => {
@@ -359,6 +419,31 @@ const AppLinera: React.FC = () => {
             <div className="min-h-screen w-full bg-slate-900 text-slate-100 flex flex-col font-sans relative overflow-y-auto">
                 <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10 pointer-events-none"></div>
                 <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-slate-900 to-slate-800 z-0 pointer-events-none"></div>
+
+                {/* Poker-themed background decorations for lobby - with smooth animations */}
+                <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
+                    {/* Floating cards - corners with animations */}
+                    <div className="absolute -top-8 -left-8 text-9xl opacity-[0.04] select-none animate-float-slow" style={{ '--rotate-start': '-12deg' } as React.CSSProperties}>🂡</div>
+                    <div className="absolute top-20 left-20 text-7xl opacity-[0.03] select-none animate-float-medium animation-delay-2000" style={{ '--rotate-start': '15deg' } as React.CSSProperties}>🂮</div>
+                    <div className="absolute -top-5 -right-12 text-9xl opacity-[0.04] select-none animate-float-drift animation-delay-1000" style={{ '--rotate-start': '20deg' } as React.CSSProperties}>🃁</div>
+                    <div className="absolute top-32 right-16 text-6xl opacity-[0.03] select-none animate-float-fast animation-delay-3000" style={{ '--rotate-start': '-8deg' } as React.CSSProperties}>🂾</div>
+                    <div className="absolute bottom-20 -left-10 text-8xl opacity-[0.04] select-none animate-float-medium animation-delay-4000" style={{ '--rotate-start': '10deg' } as React.CSSProperties}>🃎</div>
+                    <div className="absolute bottom-10 -right-8 text-8xl opacity-[0.04] select-none animate-float-slow animation-delay-5000" style={{ '--rotate-start': '-15deg' } as React.CSSProperties}>🂫</div>
+
+                    {/* Suit symbols scattered with pulse glow */}
+                    <div className="absolute top-[20%] left-[10%] text-6xl opacity-[0.02] select-none animate-pulse-glow">♠</div>
+                    <div className="absolute top-[30%] right-[15%] text-7xl opacity-[0.02] select-none text-red-500 animate-pulse-glow animation-delay-1000">♥</div>
+                    <div className="absolute bottom-[35%] left-[20%] text-5xl opacity-[0.02] select-none text-red-500 animate-pulse-glow animation-delay-2000">♦</div>
+                    <div className="absolute bottom-[25%] right-[10%] text-6xl opacity-[0.02] select-none animate-pulse-glow animation-delay-3000">♣</div>
+                    <div className="absolute top-[50%] left-[5%] text-4xl opacity-[0.015] select-none animate-pulse-glow animation-delay-4000">♠</div>
+                    <div className="absolute top-[60%] right-[8%] text-5xl opacity-[0.015] select-none text-red-500 animate-pulse-glow animation-delay-5000">♥</div>
+
+                    {/* Decorative chip circles - spinning slowly */}
+                    <div className="absolute top-[15%] left-[25%] w-20 h-20 rounded-full border-4 border-amber-500/[0.03] animate-spin-slow"></div>
+                    <div className="absolute top-[40%] right-[20%] w-16 h-16 rounded-full border-4 border-red-500/[0.03] animate-spin-slow animation-delay-2000" style={{ animationDirection: 'reverse' } as React.CSSProperties}></div>
+                    <div className="absolute bottom-[30%] left-[15%] w-24 h-24 rounded-full border-4 border-emerald-500/[0.03] animate-spin-slow animation-delay-4000"></div>
+                    <div className="absolute bottom-[20%] right-[25%] w-14 h-14 rounded-full border-4 border-purple-500/[0.03] animate-spin-slow animation-delay-1000" style={{ animationDirection: 'reverse' } as React.CSSProperties}></div>
+                </div>
 
                 <header className="relative z-10 p-6 flex justify-between items-center max-w-7xl mx-auto w-full">
                     <div className="flex items-center gap-3">
@@ -498,7 +583,41 @@ const AppLinera: React.FC = () => {
     // GAME VIEW
     return (
         <div className="min-h-screen w-full bg-slate-900 text-slate-100 flex flex-col overflow-hidden relative font-sans">
+            {/* Poker-themed background */}
             <div className="absolute inset-0 bg-radial-gradient from-emerald-900/40 to-slate-900 z-0 pointer-events-none"></div>
+
+            {/* Floating poker cards background decoration - with smooth animations */}
+            <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
+                {/* Top left cards - floating */}
+                <div className="absolute -top-10 -left-10 text-8xl opacity-5 select-none animate-float-slow" style={{ '--rotate-start': '-12deg' } as React.CSSProperties}>🂡</div>
+                <div className="absolute top-20 left-10 text-6xl opacity-5 select-none animate-float-medium animation-delay-2000" style={{ '--rotate-start': '6deg' } as React.CSSProperties}>🂮</div>
+                <div className="absolute top-40 -left-5 text-7xl opacity-5 select-none animate-float-drift animation-delay-4000" style={{ '--rotate-start': '-25deg' } as React.CSSProperties}>🃁</div>
+
+                {/* Top right cards - floating */}
+                <div className="absolute -top-5 -right-10 text-8xl opacity-5 select-none animate-float-medium animation-delay-1000" style={{ '--rotate-start': '15deg' } as React.CSSProperties}>🂾</div>
+                <div className="absolute top-32 right-5 text-6xl opacity-5 select-none animate-float-slow animation-delay-3000" style={{ '--rotate-start': '-10deg' } as React.CSSProperties}>🃎</div>
+                <div className="absolute top-60 -right-8 text-7xl opacity-5 select-none animate-float-fast animation-delay-5000" style={{ '--rotate-start': '20deg' } as React.CSSProperties}>🂫</div>
+
+                {/* Bottom left cards - floating */}
+                <div className="absolute bottom-20 -left-8 text-7xl opacity-5 select-none animate-float-drift animation-delay-2000" style={{ '--rotate-start': '8deg' } as React.CSSProperties}>🃋</div>
+                <div className="absolute bottom-40 left-16 text-6xl opacity-5 select-none animate-float-medium animation-delay-4000" style={{ '--rotate-start': '-15deg' } as React.CSSProperties}>🂢</div>
+
+                {/* Bottom right cards - floating */}
+                <div className="absolute bottom-10 -right-5 text-8xl opacity-5 select-none animate-float-slow animation-delay-3000" style={{ '--rotate-start': '-12deg' } as React.CSSProperties}>🃑</div>
+                <div className="absolute bottom-48 right-10 text-6xl opacity-5 select-none animate-float-fast animation-delay-1000" style={{ '--rotate-start': '18deg' } as React.CSSProperties}>🂱</div>
+
+                {/* Center decorations - suits with pulse glow */}
+                <div className="absolute top-1/4 left-[5%] text-4xl opacity-[0.03] select-none animate-pulse-glow">♠</div>
+                <div className="absolute top-1/3 right-[8%] text-5xl opacity-[0.03] select-none text-red-500 animate-pulse-glow animation-delay-1000">♥</div>
+                <div className="absolute bottom-1/3 left-[10%] text-4xl opacity-[0.03] select-none text-red-500 animate-pulse-glow animation-delay-2000">♦</div>
+                <div className="absolute bottom-1/4 right-[5%] text-5xl opacity-[0.03] select-none animate-pulse-glow animation-delay-3000">♣</div>
+
+                {/* Subtle chip decorations - spinning slowly */}
+                <div className="absolute top-[15%] left-[15%] w-12 h-12 rounded-full border-4 border-amber-500/10 animate-spin-slow"></div>
+                <div className="absolute top-[20%] right-[12%] w-10 h-10 rounded-full border-4 border-red-500/10 animate-spin-slow animation-delay-2000" style={{ animationDirection: 'reverse' } as React.CSSProperties}></div>
+                <div className="absolute bottom-[25%] left-[8%] w-14 h-14 rounded-full border-4 border-emerald-500/10 animate-spin-slow animation-delay-4000"></div>
+                <div className="absolute bottom-[18%] right-[15%] w-11 h-11 rounded-full border-4 border-purple-500/10 animate-spin-slow animation-delay-1000" style={{ animationDirection: 'reverse' } as React.CSSProperties}></div>
+            </div>
 
             <header className="relative z-10 w-full p-4 flex justify-between items-center bg-slate-900/80 backdrop-blur-md border-b border-white/10">
                 <div className="flex items-center gap-2">
@@ -639,15 +758,34 @@ const AppLinera: React.FC = () => {
                         )}
                     </div>
 
-                    {/* Other players - only show if they exist */}
+                    {/* Other players - 8 seat positions around oval table */}
+                    {/* Seat 1: Top */}
                     {localPlayers.length > 1 && localPlayers[1] && (
                         <PlayerSeat player={localPlayers[1]} position="top" isDealer={dealerIdx === 1} />
                     )}
+                    {/* Seat 2: Top-Left */}
                     {localPlayers.length > 2 && localPlayers[2] && (
-                        <PlayerSeat player={localPlayers[2]} position="left" isDealer={dealerIdx === 2} />
+                        <PlayerSeat player={localPlayers[2]} position="top-left" isDealer={dealerIdx === 2} />
                     )}
+                    {/* Seat 3: Left */}
                     {localPlayers.length > 3 && localPlayers[3] && (
-                        <PlayerSeat player={localPlayers[3]} position="right" isDealer={dealerIdx === 3} />
+                        <PlayerSeat player={localPlayers[3]} position="left" isDealer={dealerIdx === 3} />
+                    )}
+                    {/* Seat 4: Bottom-Left */}
+                    {localPlayers.length > 4 && localPlayers[4] && (
+                        <PlayerSeat player={localPlayers[4]} position="bottom-left" isDealer={dealerIdx === 4} />
+                    )}
+                    {/* Seat 5: Bottom-Right */}
+                    {localPlayers.length > 5 && localPlayers[5] && (
+                        <PlayerSeat player={localPlayers[5]} position="bottom-right" isDealer={dealerIdx === 5} />
+                    )}
+                    {/* Seat 6: Right */}
+                    {localPlayers.length > 6 && localPlayers[6] && (
+                        <PlayerSeat player={localPlayers[6]} position="right" isDealer={dealerIdx === 6} />
+                    )}
+                    {/* Seat 7: Top-Right */}
+                    {localPlayers.length > 7 && localPlayers[7] && (
+                        <PlayerSeat player={localPlayers[7]} position="top-right" isDealer={dealerIdx === 7} />
                     )}
 
                     {/* Current player (You) - always at bottom */}
@@ -1081,10 +1219,53 @@ const AppLinera: React.FC = () => {
                                     disabled={!isMyTurn}
                                 />
                             </div>
+
+                            {/* Quick Actions: Chat, History, Auto-Actions */}
+                            <div className="hidden md:flex items-center gap-2">
+                                <ChatButton
+                                    onClick={() => {
+                                        setIsChatOpen(!isChatOpen);
+                                        setChatOpen(!isChatOpen);
+                                    }}
+                                    unreadCount={unreadChatCount}
+                                />
+                                <HandHistoryButton
+                                    onClick={() => setIsHistoryOpen(true)}
+                                    count={handHistory.length}
+                                />
+                                <AutoActions
+                                    settings={autoActions}
+                                    onSettingsChange={updateAutoActions}
+                                    isMyTurn={isMyTurn}
+                                    isOpen={isAutoActionsOpen}
+                                    onToggle={() => setIsAutoActionsOpen(!isAutoActionsOpen)}
+                                />
+                            </div>
                         </div>
                     </div>
                 );
             })()}
+
+            {/* Chat System */}
+            <ChatSystem
+                messages={chatMessages}
+                onSendMessage={(msg) => sendChatMessage(msg, playerName)}
+                playerName={playerName}
+                isOpen={isChatOpen}
+                onClose={() => {
+                    setIsChatOpen(false);
+                    setChatOpen(false);
+                }}
+                unreadCount={unreadChatCount}
+            />
+
+            {/* Hand History Modal */}
+            <HandHistory
+                history={handHistory}
+                isOpen={isHistoryOpen}
+                onClose={() => setIsHistoryOpen(false)}
+                currentPlayerName={playerName}
+            />
         </div>
     );
 };
@@ -1099,12 +1280,19 @@ const HandRankRow: React.FC<{ rank: string, desc: string, score: string }> = ({ 
     </div>
 );
 
-const PlayerSeat: React.FC<{ player: Player, position: 'top' | 'left' | 'right', isDealer?: boolean }> = ({ player, position, isDealer }) => {
+// Position type for 8 player seats around oval table
+type SeatPosition = 'top' | 'top-left' | 'top-right' | 'left' | 'right' | 'bottom-left' | 'bottom-right';
+
+const PlayerSeat: React.FC<{ player: Player, position: SeatPosition, isDealer?: boolean }> = ({ player, position, isDealer }) => {
     const getPositionClasses = () => {
         switch (position) {
             case 'top': return 'top-[-50px] left-1/2 transform -translate-x-1/2 flex-col-reverse';
+            case 'top-left': return 'top-[5%] left-[15%] transform flex-col-reverse';
+            case 'top-right': return 'top-[5%] right-[15%] transform flex-col-reverse';
             case 'left': return 'left-[-60px] top-1/2 transform -translate-y-1/2 flex-row';
             case 'right': return 'right-[-60px] top-1/2 transform -translate-y-1/2 flex-row-reverse';
+            case 'bottom-left': return 'bottom-[5%] left-[15%] transform flex-col';
+            case 'bottom-right': return 'bottom-[5%] right-[15%] transform flex-col';
         }
     };
 
@@ -1112,8 +1300,12 @@ const PlayerSeat: React.FC<{ player: Player, position: 'top' | 'left' | 'right',
     const getBetBubblePosition = () => {
         switch (position) {
             case 'top': return '-bottom-12 left-1/2 -translate-x-1/2';
+            case 'top-left': return '-bottom-12 left-1/2 -translate-x-1/2';
+            case 'top-right': return '-bottom-12 left-1/2 -translate-x-1/2';
             case 'left': return 'top-1/2 -right-16 -translate-y-1/2';
             case 'right': return 'top-1/2 -left-16 -translate-y-1/2';
+            case 'bottom-left': return '-top-12 left-1/2 -translate-x-1/2';
+            case 'bottom-right': return '-top-12 left-1/2 -translate-x-1/2';
         }
     };
 

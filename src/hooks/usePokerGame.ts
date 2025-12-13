@@ -393,6 +393,50 @@ export interface LeaderboardEntry {
     chainId: string;
 }
 
+// Chat message interface
+export interface ChatMessage {
+    id: string;
+    playerName: string;
+    message: string;
+    timestamp: number;
+    type: 'chat' | 'action' | 'system';
+}
+
+// Hand history record
+export interface HandRecord {
+    id: string;
+    handNumber: number;
+    timestamp: number;
+    players: {
+        name: string;
+        cards?: { rank: string; suit: string }[];
+        finalChips: number;
+        result: 'won' | 'lost' | 'folded';
+    }[];
+    communityCards: { rank: string; suit: string }[];
+    pot: number;
+    winner: {
+        name: string;
+        amount: number;
+        handRank?: string;
+        reason: 'fold' | 'showdown';
+    };
+    actions: {
+        playerName: string;
+        action: string;
+        amount?: number;
+        phase: string;
+    }[];
+}
+
+// Auto action settings
+export interface AutoActionSettings {
+    autoFold: boolean;
+    autoCheckFold: boolean;
+    autoCall: boolean;
+    sitOut: boolean;
+}
+
 export interface PokerGameState {
     tableId: string;
     tableName: string;
@@ -452,6 +496,23 @@ export function usePokerGame(tableId: string) {
     const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const gameStateRef = useRef<PokerGameState | null>(null);
 
+    // Chat state
+    const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+    const [unreadChatCount, setUnreadChatCount] = useState(0);
+    const chatOpenRef = useRef(false);
+
+    // Hand history state
+    const [handHistory, setHandHistory] = useState<HandRecord[]>([]);
+    const currentHandActionsRef = useRef<HandRecord['actions']>([]);
+
+    // Auto actions state
+    const [autoActions, setAutoActions] = useState<AutoActionSettings>({
+        autoFold: false,
+        autoCheckFold: false,
+        autoCall: false,
+        sitOut: false,
+    });
+
     // Keep ref in sync with state
     useEffect(() => {
         gameStateRef.current = gameState;
@@ -482,6 +543,8 @@ export function usePokerGame(tableId: string) {
         ws.onopen = () => {
             setWsConnected(true);
             ws.send(JSON.stringify({ type: 'JOIN_ROOM', roomId: tableId }));
+            // Request chat history
+            ws.send(JSON.stringify({ type: 'GET_CHAT_HISTORY', roomId: tableId }));
         };
 
         ws.onmessage = (event) => {
@@ -531,6 +594,16 @@ export function usePokerGame(tableId: string) {
                 } else if (message.type === 'ROOM_COUNTS') {
                     // Dispatch custom event for lobby to receive room counts
                     window.dispatchEvent(new CustomEvent('room-counts-update', { detail: message.counts }));
+                } else if (message.type === 'CHAT_MESSAGE') {
+                    // Receive chat message
+                    setChatMessages(prev => [...prev, message.message]);
+                    // Increment unread count if chat is not open
+                    if (!chatOpenRef.current) {
+                        setUnreadChatCount(prev => prev + 1);
+                    }
+                } else if (message.type === 'CHAT_HISTORY') {
+                    // Receive chat history on join
+                    setChatMessages(message.messages || []);
                 }
             } catch (err) {
                 // Silent error handling
@@ -791,8 +864,8 @@ export function usePokerGame(tableId: string) {
                     return true;
                 }
 
-                // Check max players
-                if (currentState.players.length >= 4) {
+                // Check max players (8 max)
+                if (currentState.players.length >= 8) {
                     setError('Table is full');
                     setIsLoading(false);
                     return false;
@@ -833,12 +906,16 @@ export function usePokerGame(tableId: string) {
 
                 // ============================================================
                 // VALIDATION: Room access rules
-                // - New players: Can ONLY join Rookie Lounge, get 1000 free chips
-                // - Existing players: Must have >= min buy-in for the room
+                // - Rookie Lounge (buyIn=1000): Anyone can join, no minimum chips required
+                //   - New players get 1000 free chips
+                //   - Existing players with low chips can still join (use their current chips)
+                // - Other rooms: Must have >= min buy-in for the room
                 // ============================================================
+                const isRookieLounge = buyIn === ROOKIE_LOUNGE_BUYIN;
+
                 if (!isExistingPlayer) {
                     // New player - can only join Rookie Lounge
-                    if (buyIn !== ROOKIE_LOUNGE_BUYIN) {
+                    if (!isRookieLounge) {
                         const errorMsg = `New players can only join Rookie Lounge! Play there first to earn chips.`;
                         console.log('[JoinTable] ❌', errorMsg);
                         setError(errorMsg);
@@ -849,13 +926,24 @@ export function usePokerGame(tableId: string) {
                     playerChips = NEW_PLAYER_BONUS;
                     console.log('[JoinTable] 🎁 New player bonus:', playerChips, 'chips');
                 } else {
-                    // Existing player - check if they have enough chips
-                    if (playerChips < buyIn) {
-                        const errorMsg = `Insufficient chips! You have ${playerChips.toLocaleString()} chips but this room requires minimum ${buyIn.toLocaleString()} chips.`;
-                        console.log('[JoinTable] ❌', errorMsg);
-                        setError(errorMsg);
-                        setIsLoading(false);
-                        return false;
+                    // Existing player
+                    if (isRookieLounge) {
+                        // Rookie Lounge: Anyone can join with any amount of chips
+                        // If player has 0 chips, give them the bonus again
+                        if (playerChips <= 0) {
+                            playerChips = NEW_PLAYER_BONUS;
+                            console.log('[JoinTable] 🎁 Rebuy bonus for broke player:', playerChips, 'chips');
+                        }
+                        console.log('[JoinTable] ✅ Rookie Lounge - no minimum required, chips:', playerChips);
+                    } else {
+                        // Other rooms - check if they have enough chips
+                        if (playerChips < buyIn) {
+                            const errorMsg = `Insufficient chips! You have ${playerChips.toLocaleString()} chips but this room requires minimum ${buyIn.toLocaleString()} chips.`;
+                            console.log('[JoinTable] ❌', errorMsg);
+                            setError(errorMsg);
+                            setIsLoading(false);
+                            return false;
+                        }
                     }
                 }
 
@@ -1557,6 +1645,133 @@ export function usePokerGame(tableId: string) {
         gameStateRef.current = freshState;
     }, [tableId, getDefaultState]);
 
+    // ============ CHAT FUNCTIONS ============
+
+    // Send chat message
+    const sendChatMessage = useCallback((message: string, playerName: string) => {
+        if (!message.trim() || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+
+        wsRef.current.send(JSON.stringify({
+            type: 'CHAT_MESSAGE',
+            roomId: tableId,
+            playerName,
+            message: message.trim(),
+            msgType: 'chat',
+        }));
+    }, [tableId]);
+
+    // Send action message (for hand history)
+    const sendActionMessage = useCallback((playerName: string, action: string, amount?: number) => {
+        if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+
+        const actionText = amount ? `${action} ${amount}` : action;
+        wsRef.current.send(JSON.stringify({
+            type: 'CHAT_MESSAGE',
+            roomId: tableId,
+            playerName,
+            message: actionText,
+            msgType: 'action',
+        }));
+
+        // Track action for hand history
+        const currentPhase = gameStateRef.current?.phase || 'Unknown';
+        currentHandActionsRef.current.push({
+            playerName,
+            action,
+            amount,
+            phase: currentPhase,
+        });
+    }, [tableId]);
+
+    // Mark chat as read
+    const markChatAsRead = useCallback(() => {
+        setUnreadChatCount(0);
+    }, []);
+
+    // Set chat open state (for unread tracking)
+    const setChatOpen = useCallback((isOpen: boolean) => {
+        chatOpenRef.current = isOpen;
+        if (isOpen) {
+            setUnreadChatCount(0);
+        }
+    }, []);
+
+    // ============ HAND HISTORY FUNCTIONS ============
+
+    // Record completed hand to history
+    const recordHandToHistory = useCallback((
+        handNumber: number,
+        players: { name: string; cards?: Card[]; finalChips: number; status: string }[],
+        communityCards: Card[],
+        pot: number,
+        winner: { name: string; amount: number; handRank?: string; reason: 'fold' | 'showdown' }
+    ) => {
+        const record: HandRecord = {
+            id: `hand-${handNumber}-${Date.now()}`,
+            handNumber,
+            timestamp: Date.now(),
+            players: players.map(p => ({
+                name: p.name,
+                cards: p.cards?.map(c => ({ rank: c.rank, suit: c.suit })),
+                finalChips: p.finalChips,
+                result: p.name === winner.name ? 'won' : p.status === 'Folded' ? 'folded' : 'lost',
+            })),
+            communityCards: communityCards.map(c => ({ rank: c.rank, suit: c.suit })),
+            pot,
+            winner,
+            actions: [...currentHandActionsRef.current],
+        };
+
+        setHandHistory(prev => {
+            const newHistory = [record, ...prev];
+            // Keep only last 20 hands
+            return newHistory.slice(0, 20);
+        });
+
+        // Clear current hand actions
+        currentHandActionsRef.current = [];
+    }, []);
+
+    // Clear hand history
+    const clearHandHistory = useCallback(() => {
+        setHandHistory([]);
+    }, []);
+
+    // ============ AUTO ACTIONS ============
+
+    // Update auto action settings
+    const updateAutoActions = useCallback((settings: AutoActionSettings) => {
+        setAutoActions(settings);
+    }, []);
+
+    // Get auto action for current situation
+    const getAutoAction = useCallback((
+        canCheck: boolean,
+        callAmount: number
+    ): { action: string; amount?: number } | null => {
+        if (autoActions.sitOut || autoActions.autoFold) {
+            return { action: 'fold' };
+        }
+        if (autoActions.autoCheckFold) {
+            return canCheck ? { action: 'check' } : { action: 'fold' };
+        }
+        if (autoActions.autoCall) {
+            return canCheck ? { action: 'check' } : { action: 'call' };
+        }
+        return null;
+    }, [autoActions]);
+
+    // Reset auto actions after use
+    const resetAutoActions = useCallback(() => {
+        setAutoActions(prev => ({
+            ...prev,
+            autoFold: false,
+            autoCheckFold: false,
+            autoCall: false,
+            // sitOut persists until manually turned off
+        }));
+    }, []);
+
     return {
         gameState,
         myCards,
@@ -1572,5 +1787,21 @@ export function usePokerGame(tableId: string) {
         leaveTable,
         resetRoom,
         refetch: syncWithBlockchain,
+        // Chat
+        chatMessages,
+        unreadChatCount,
+        sendChatMessage,
+        sendActionMessage,
+        markChatAsRead,
+        setChatOpen,
+        // Hand History
+        handHistory,
+        recordHandToHistory,
+        clearHandHistory,
+        // Auto Actions
+        autoActions,
+        updateAutoActions,
+        getAutoAction,
+        resetAutoActions,
     };
 }
