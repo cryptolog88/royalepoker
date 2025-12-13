@@ -99,19 +99,31 @@ const newPlayer: PlayerInfo = {
 
 ### 2. PreFlop
 - Setiap pemain menerima 2 kartu tertutup
-- Small blind (posisi 0) bayar setengah big blind
-- Big blind (posisi 1) bayar full blind
-- Betting dimulai dari UTG (posisi 2)
+- Blind posting berdasarkan posisi relatif terhadap dealer:
+  - **Heads-up (2 pemain)**: Dealer = Small Blind, pemain lain = Big Blind
+  - **3+ pemain**: Dealer → SB (dealer+1) → BB (dealer+2)
+- First-to-act di PreFlop:
+  - **Heads-up**: Small Blind (Dealer) bertindak pertama
+  - **3+ pemain**: UTG (pemain setelah Big Blind) bertindak pertama
 
 ```typescript
-// Posting blinds
+// Posting blinds - relative to dealer position
+const numPlayers = currentState.players.length;
+const newDealerPosition = (currentState.dealerPosition + 1) % numPlayers;
+
+// Heads-up: Dealer = SB, other = BB
+// 3+ players: Dealer, then SB (dealer+1), then BB (dealer+2)
+const smallBlindPos = numPlayers === 2 ? newDealerPosition : (newDealerPosition + 1) % numPlayers;
+const bigBlindPos = numPlayers === 2 ? (newDealerPosition + 1) % numPlayers : (newDealerPosition + 2) % numPlayers;
+
+// First to act in PreFlop
+const firstToAct = numPlayers === 2 ? smallBlindPos : (bigBlindPos + 1) % numPlayers;
+
 players: currentState.players.map((p, idx) => {
-    if (idx === 0) {
-        // Small blind
-        return { ...p, chips: p.chips - 10, currentBet: 10 };
-    } else if (idx === 1) {
-        // Big blind
-        return { ...p, chips: p.chips - 20, currentBet: 20 };
+    if (idx === smallBlindPos) {
+        return { ...p, chips: p.chips - smallBlindAmount, currentBet: smallBlindAmount };
+    } else if (idx === bigBlindPos) {
+        return { ...p, chips: p.chips - bigBlindAmount, currentBet: bigBlindAmount };
     }
     return { ...p, currentBet: 0 };
 }),
@@ -120,18 +132,32 @@ players: currentState.players.map((p, idx) => {
 ### 3. Flop
 - 3 kartu komunitas dibuka
 - Betting round baru (currentBet reset ke 0)
+- First-to-act: Pemain aktif pertama setelah dealer
 
 ### 4. Turn
 - 1 kartu komunitas ke-4 dibuka
 - Betting round baru
+- First-to-act: Pemain aktif pertama setelah dealer
 
 ### 5. River
 - 1 kartu komunitas ke-5 (terakhir) dibuka
 - Betting round terakhir
+- First-to-act: Pemain aktif pertama setelah dealer
 
 ### 6. Showdown
 - Semua kartu dibuka
-- Tangan terbaik menang
+- Tangan dievaluasi menggunakan hand evaluator lengkap
+- Ranking tangan (tertinggi ke terendah):
+  1. **Royal Flush** - A-K-Q-J-10 suit sama
+  2. **Straight Flush** - 5 kartu berurutan suit sama
+  3. **Four of a Kind** - 4 kartu rank sama
+  4. **Full House** - Three of a Kind + Pair
+  5. **Flush** - 5 kartu suit sama
+  6. **Straight** - 5 kartu berurutan (termasuk A-2-3-4-5 wheel)
+  7. **Three of a Kind** - 3 kartu rank sama
+  8. **Two Pair** - 2 pasang kartu
+  9. **One Pair** - 1 pasang kartu
+  10. **High Card** - Kartu tertinggi
 - Pot diberikan ke pemenang
 
 ### 7. Winner
@@ -272,20 +298,35 @@ if (playersStillIn.length === 1) {
 
 ### 3. Saat Showdown
 
-Jika sampai showdown, tangan terbaik menang:
+Jika sampai showdown, tangan terbaik menang menggunakan hand evaluator lengkap:
 
 ```typescript
-// Evaluasi tangan semua pemain
-const playerHands = playersStillIn.map(p => ({
-    player: p,
-    hand: evaluateHand([...playerCards, ...communityCards])
-}));
+// Evaluasi tangan semua pemain menggunakan evaluateBestHand
+const playerHands = playersInShowdown.map((player, idx) => {
+    const playerIdx = updatedPlayers.findIndex(p => p.name === player.name);
+    const holeCards = currentState.dealtCards?.playerCards?.[playerIdx] || [];
+    const bestHand = evaluateBestHand(holeCards, communityCards);
+    
+    return {
+        player,
+        holeCards,
+        bestHand, // { rank: number, highCards: number[] }
+    };
+});
 
-// Sort by hand strength
-playerHands.sort((a, b) => b.hand.rank - a.hand.rank);
+// Bandingkan tangan untuk menentukan pemenang
+let winners = [playerHands[0]];
+for (let i = 1; i < playerHands.length; i++) {
+    const comparison = compareHands(playerHands[i].bestHand, winners[0].bestHand);
+    if (comparison > 0) {
+        winners = [playerHands[i]]; // Pemenang baru
+    } else if (comparison === 0) {
+        winners.push(playerHands[i]); // Tie
+    }
+}
 
-// Winner adalah yang tertinggi
-const winner = playerHands[0].player;
+// Winner mendapat pot
+const winner = winners[0].player;
 winner.chips += totalPot;
 ```
 
@@ -409,23 +450,50 @@ if (newState.phase === 'ReadyForNextHand') {
 └─────────────┘                    │  (port 3001)│
        │                           └─────────────┘
        │                                  ▲
-       │ HTTP                             │ WebSocket
+       │ HTTP/GraphQL                     │ WebSocket
        ▼                                  ▼
 ┌─────────────┐                    ┌─────────────┐
 │   Linera    │                    │  Browser B  │
 │   Service   │                    └─────────────┘
-│  (port 8080)│
+│  (testnet)  │
 └─────────────┘
        │
-       │ GraphQL
+       │ GraphQL Mutations
        ▼
 ┌─────────────────────────────────────────┐
 │              Linera Blockchain          │
 │  ┌─────────────┐    ┌─────────────┐    │
 │  │   Poker     │    │   Arena     │    │
 │  │  Contract   │    │  Contract   │    │
+│  │             │    │             │    │
+│  │ - lib.rs    │    │ - lib.rs    │    │
+│  │ - contract  │    │ - contract  │    │
+│  │ - service   │    │ - service   │    │
+│  │ - state     │    │ - state     │    │
 │  └─────────────┘    └─────────────┘    │
 └─────────────────────────────────────────┘
+```
+
+### Contract Structure
+
+Kedua contract mengikuti pola DeadKeys dengan file terpisah:
+
+```
+poker-contract/src/
+├── lib.rs           # Entry point, exports modules
+├── contract.rs      # Contract implementation (game logic)
+├── service.rs       # GraphQL service (queries & mutations)
+├── state.rs         # PokerState definition
+├── commit_reveal.rs # Card commitment system
+├── hand_evaluator.rs# Hand ranking evaluation
+├── messages.rs      # Cross-chain messages
+└── operations.rs    # Operation definitions
+
+poker-arena/src/
+├── lib.rs           # Entry point, exports modules
+├── contract.rs      # Contract implementation
+├── service.rs       # GraphQL service
+└── state.rs         # ArenaState (global leaderboard)
 ```
 
 ### State Synchronization
@@ -522,8 +590,45 @@ Leaderboard Update:
 
 ---
 
+## 🎲 Hand Evaluator
+
+Aplikasi menggunakan hand evaluator lengkap yang diimplementasikan di frontend (`src/hooks/usePokerGame.ts`):
+
+```typescript
+// Hand rankings (higher = better)
+const HAND_RANKS = {
+    HIGH_CARD: 1,
+    ONE_PAIR: 2,
+    TWO_PAIR: 3,
+    THREE_OF_A_KIND: 4,
+    STRAIGHT: 5,
+    FLUSH: 6,
+    FULL_HOUSE: 7,
+    FOUR_OF_A_KIND: 8,
+    STRAIGHT_FLUSH: 9,
+    ROYAL_FLUSH: 10,
+};
+
+// Evaluate best 5-card hand from 7 cards (2 hole + 5 community)
+const evaluateBestHand = (holeCards: Card[], communityCards: Card[]): { rank: number; highCards: number[] }
+
+// Compare two hands, return 1 if hand1 wins, -1 if hand2 wins, 0 if tie
+const compareHands = (hand1, hand2): number
+```
+
+Fitur:
+- Evaluasi semua kombinasi 5 kartu dari 7 kartu
+- Support untuk A-2-3-4-5 wheel straight
+- Perbandingan kicker untuk tie-breaker
+
+---
+
 ## 🔗 Links
 
 - [README.md](./README.md) - Overview dan quick start
-- [DEPLOYMENT.md](./DEPLOYMENT.md) - Panduan deployment
+- [linera-poker-implementation.md](./linera-poker-implementation.md) - Dokumentasi implementasi teknis detail
 - [Linera Documentation](https://linera.dev) - Dokumentasi Linera
+
+---
+
+**Last Updated**: Desember 2024

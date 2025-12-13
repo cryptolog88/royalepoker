@@ -1,5 +1,9 @@
 # Implementasi Poker Multiplayer di Linera Blockchain
 
+> **⚠️ Catatan**: Dokumen ini adalah referensi teknis detail untuk implementasi poker di Linera. 
+> Beberapa bagian mungkin berbeda dari implementasi aktual saat ini.
+> Untuk dokumentasi terkini tentang gameplay, lihat [GAME_DOCUMENTATION.md](./GAME_DOCUMENTATION.md).
+
 ## 📋 Daftar Isi
 
 1. [Overview](#overview)
