@@ -1,17 +1,19 @@
 <div align="center">
 
-# 🃏 Royale Poker
+<img src="filora.png" alt="Filora Poker" width="120" />
+
+# Filora Poker
 
 **Decentralized Texas Hold'em Poker on Linera Blockchain**
 
-[![Linera](https://img.shields.io/badge/Linera-Testnet%20Conway-blue)](https://linera.io)
+[![Linera](https://img.shields.io/badge/Powered%20by-Linera-blue)](https://linera.io)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 </div>
 
 ## 📋 Overview
 
-Royale Poker is a multiplayer Texas Hold'em poker game built on the Linera blockchain. Features real-time gameplay with WebSocket synchronization, deterministic card shuffling, browser-based Linera WASM client for direct blockchain interaction, and persistent chip balances stored on-chain.
+Filora Poker is a multiplayer Texas Hold'em poker game built on the Linera blockchain. Features real-time gameplay with WebSocket synchronization, deterministic card shuffling, browser-based Linera WASM client for direct blockchain interaction, and persistent chip balances stored on-chain.
 
 ## 🔗 Deployment Info
 
@@ -129,7 +131,7 @@ cargo build --release --target wasm32-unknown-unknown
 ## 📁 Project Structure
 
 ```
-royale-poker/
+filora-poker/
 ├── src/
 │   ├── AppLinera.tsx           # Main game component
 │   ├── components/
@@ -216,5 +218,9 @@ MIT License - feel free to use and modify for your own projects.
 ---
 
 <div align="center">
-Built with ❤️ on <a href="https://linera.io">Linera</a>
+
+<img src="linera.png" alt="Linera" width="100" />
+
+Built with ❤️ on [Linera](https://linera.io)
+
 </div>
